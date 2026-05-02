@@ -1,0 +1,39 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "fx-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-05-02",
+	"observability": {
+		"logs": {"invocation_logs": false},
+		"enabled": true,
+	},
+	"secrets": {
+		"required": ["FRED_API_KEY"]
+	},
+	"triggers": {
+    "crons": [
+      "0 * * * *"
+    ]
+  },
+	"workflows": [
+		{
+			"name": "workflow-fx-api",
+			"binding": "MY_WORKFLOW",
+			"class_name": "MyWorkflow"
+		}
+	],
+	"upload_source_maps": true,
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"r2_buckets": [
+    {
+      "binding": "STATIC_FILES", // <~ valid JavaScript variable name
+      "bucket_name": "static-files"
+    }
+  ]
+}
