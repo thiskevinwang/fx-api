@@ -1,0 +1,14 @@
+{
+  "name": "fx-api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "oxlint --type-aware --type-check"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.47.0",
+    "oxlint": "^1.62.0",
+    "oxlint-tsgolint": "^0.22.1",
+    "typescript": "^6.0.3"
+  }
+}
