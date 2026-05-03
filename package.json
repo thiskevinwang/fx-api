@@ -7,6 +7,8 @@
     "start": "wrangler dev",
     "dev": "wrangler dev",
     "cf-typegen": "wrangler types",
+    "test": "bun test",
+    "format": "oxfmt",
     "lint": "oxlint --type-aware --type-check"
   },
   "devDependencies": {
@@ -18,6 +20,7 @@
     "wrangler": "^4.87.0"
   },
   "dependencies": {
-    "hono": "^4.12.16"
+    "hono": "^4.12.16",
+    "zod": "^4.4.2"
   }
 }

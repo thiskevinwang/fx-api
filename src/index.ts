@@ -5,69 +5,107 @@ import {
   WorkflowStep,
 } from "cloudflare:workers";
 
-import { Hono } from "hono";
-
-const FAKE_FILE = "2000-12-20";
+import { createFxApiApp } from "./lib/fx-api";
+import { buildFxManifest, summarizeFxSnapshots } from "./lib/fx";
+import {
+  buildFxSnapshotsFromFredObservationSets,
+  fetchFredObservationSets,
+  getFxEtlWindow,
+} from "./lib/fx-etl";
+import { FredClient } from "./lib/fred";
+import { writeFxSnapshotsAndManifest } from "./lib/fx-storage";
 
 type Params = {
   createdTimestamp: number;
 };
 
-type WorkflowLogLine = {
-  event?: WorkflowEvent<Params>;
-  steps: unknown[];
-};
-
 // INPUT: timestamp
-// OUTPUT: none
-// SIDE EFFECTS: fetch observations from FRED, persist to bucket
+// OUTPUT: summary logs
+// SIDE EFFECTS: fetch observations from FRED, persist FX snapshots to R2
 export class MyWorkflow extends WorkflowEntrypoint<Env, Params> {
-  private readonly logline: WorkflowLogLine = { steps: [] };
-
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
-    this.logline.event = event;
-    await step.do("fetch_data", async (ctx) => {
-      console.log("workflow.step", {
-        surface: "workflow",
-        step_name: ctx.step.name,
-        step_count: ctx.step.count,
-        attempt: ctx.config,
+    const generatedAt = new Date().toISOString();
+    const etlWindow = getFxEtlWindow(event.payload.createdTimestamp);
+
+    console.log("workflow.start", {
+      surface: "workflow",
+      instanceId: event.instanceId,
+      scheduledTime: event.payload.createdTimestamp,
+      observationStart: etlWindow.observationStart,
+      observationEnd: etlWindow.observationEnd,
+    });
+
+    const fredFetch = await step.do("fetch_fred_observations", async () => {
+      const fred = new FredClient(this.env.FRED_API_KEY);
+      const result = await fetchFredObservationSets(fred, etlWindow);
+
+      if (result.failures.length > 0) {
+        console.error("workflow.fred_fetch_failed", {
+          surface: "workflow",
+          sourceSeriesCount: result.sourceSeriesCount,
+          successfulSourceSeriesCount: result.series.length,
+          failureCount: result.failures.length,
+          failures: result.failures,
+          observationStart: result.observationStart,
+          observationEnd: result.observationEnd,
+        });
+        throw new Error(
+          `FRED fetch failed for ${result.failures.length} source series`,
+        );
+      }
+
+      return result;
+    });
+
+    console.log("workflow.fred_fetch_done", {
+      surface: "workflow",
+      sourceSeriesCount: fredFetch.sourceSeriesCount,
+      successfulSourceSeriesCount: fredFetch.series.length,
+      failureCount: fredFetch.failures.length,
+      failures: fredFetch.failures,
+      observationStart: fredFetch.observationStart,
+      observationEnd: fredFetch.observationEnd,
+    });
+
+    const snapshots = await step.do("normalize_fx_snapshots", async () => {
+      return buildFxSnapshotsFromFredObservationSets(fredFetch.series, {
+        generatedAt,
       });
-      return "ok";
     });
-    await step.do("persist_data", async (ctx) => {
-      this.logline.steps.push(ctx);
-      const randomJson = { foo: "bar" };
-      await this.env.STATIC_FILES.put(FAKE_FILE, JSON.stringify(randomJson));
-      return "ok";
+
+    if (snapshots.length === 0) {
+      throw new Error("No FX snapshots were generated");
+    }
+
+    const manifest = buildFxManifest(snapshots, generatedAt);
+    const snapshotSummary = summarizeFxSnapshots(snapshots);
+
+    await step.do("persist_fx_snapshots", async () => {
+      await writeFxSnapshotsAndManifest(
+        this.env.STATIC_FILES,
+        snapshots,
+        manifest,
+      );
+      return {
+        pairCount: manifest.pairs.length,
+        snapshotCount: snapshots.length,
+      };
     });
-    console.log("workflow.done", this.logline);
+
+    console.log("workflow.done", {
+      surface: "workflow",
+      sourceSeriesCount: fredFetch.sourceSeriesCount,
+      pairCount: manifest.pairs.length,
+      snapshotCount: snapshots.length,
+      rateCount: snapshotSummary.rateCount,
+      observationStart: snapshotSummary.observationStart,
+      observationEnd: snapshotSummary.observationEnd,
+      failureCount: fredFetch.failures.length,
+    });
   }
 }
 
-const apiHandler = new Hono<{ Bindings: Env }>()
-  .use(async (c, next) => {
-    const now = new Date().toISOString();
-    await next();
-    console.log("api", {
-      request: {
-        host: c.req.header("Host"),
-        method: c.req.method,
-        path: c.req.path,
-      },
-      response: {
-        status: c.res.status,
-      },
-      surface: "api",
-      timestamp: now,
-    });
-  })
-  .notFound((c) => {
-    return c.json({}, 404);
-  })
-  .onError((err, c) => {
-    return c.json({}, 500);
-  }).fetch;
+const apiApp = createFxApiApp();
 
 const cronHandler: ExportedHandlerScheduledHandler<Env> = async (
   controller,
@@ -79,7 +117,7 @@ const cronHandler: ExportedHandlerScheduledHandler<Env> = async (
     cron: controller.cron,
     scheduledTime: controller.scheduledTime,
   });
-  let instance = await env.MY_WORKFLOW.create({
+  const instance = await env.MY_WORKFLOW.create({
     params: {
       createdTimestamp: controller.scheduledTime,
     },
@@ -98,6 +136,6 @@ export default class extends WorkerEntrypoint<Env> {
   }
 
   fetch(request: Request) {
-    return apiHandler(request, this.env, this.ctx);
+    return apiApp.fetch(request, this.env, this.ctx);
   }
 }

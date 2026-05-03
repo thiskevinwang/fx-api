@@ -1,13 +1,45 @@
 # fx-api
 
-FX API that sources data from https://fred.stlouisfed.org/docs/api/fred/.
+This is a foreign exchange data api template. An example can be viewed at https://monies.dev
 
-Requires and API key: https://fredaccount.stlouisfed.org/apikey
+> [!IMPORTANT]
+> This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
 
 ## Development
 
-```
-npx wrangler dev --test-scheduled
+Requires a Fred API key: https://fredaccount.stlouisfed.org/apikey. Also see https://fred.stlouisfed.org/docs/api/fred/.
 
+```bash
+# run w/ schedule handler
+bnpx wrangler dev --test-scheduled
+# trigger it
 curl "http://localhost:8787/__scheduled?cron=0+*+*+*+*"
 ```
+
+## Testing
+
+```bash
+bun test
+```
+
+[ ] TODO: Rewrite test files w/ the [vitest integration](https://developers.cloudflare.com/workers/testing/vitest-integration/)
+
+## Linting and formatting
+
+```bash
+bun lint
+bun format
+```
+
+## Deployment
+
+```bash
+# one time
+bunx wrangler secret put FRED_API_KEY
+
+bun run deploy
+```
+
+## API
+
+See [docs.md](./src/docs.md) for API docs.
