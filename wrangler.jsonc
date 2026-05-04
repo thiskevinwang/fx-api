@@ -39,7 +39,7 @@
     "required": ["FRED_API_KEY"],
   },
   "triggers": {
-    "crons": ["0 1 * * *"],
+    "crons": ["0 */1 * * *"],
   },
   "workflows": [
     {
@@ -60,7 +60,7 @@
         "required": ["FRED_API_KEY"],
       },
       "triggers": {
-        "crons": ["0 1 * * *"],
+        "crons": ["0 */1 * * *"],
       },
       "workflows": [
         {
