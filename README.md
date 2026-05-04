@@ -19,10 +19,8 @@ curl "http://localhost:8787/__scheduled?cron=0+*+*+*+*"
 ## Testing
 
 ```bash
-bun test
+bun run test
 ```
-
-[ ] TODO: Rewrite test files w/ the [vitest integration](https://developers.cloudflare.com/workers/testing/vitest-integration/)
 
 ## Linting and formatting
 

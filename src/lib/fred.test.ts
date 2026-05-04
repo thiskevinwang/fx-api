@@ -1,7 +1,6 @@
 // This file was written by GPT 5.5, under human supervision.
 
-import assert from "node:assert/strict";
-import test from "node:test";
+import { test, assert } from "vitest";
 
 import { FredClient } from "./fred";
 
