@@ -11,9 +11,12 @@ Requires a Fred API key: https://fredaccount.stlouisfed.org/apikey. Also see htt
 
 ```bash
 # run w/ schedule handler
-bnpx wrangler dev --test-scheduled
-# trigger it
+bunx wrangler dev --test-scheduled
+# trigger the schedule handler + workflow
 curl "http://localhost:8787/__scheduled?cron=0+*+*+*+*"
+
+curl "http://localhost:8787/v1/pairs" | jq
+curl "http://localhost:8787/v1/rates/jpy/usd?asof=2026-05-04" | jq
 ```
 
 ## Testing

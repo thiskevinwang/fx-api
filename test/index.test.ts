@@ -13,6 +13,8 @@ describe("API", () => {
   it("responds with html for /", async () => {
     const response = await exports.default.fetch("http://example.com/");
     expect(response.status).toBe(200);
-    expect(await response.text()).toMatchFileSnapshot("./index.snapshot.html");
+    await expect(await response.text()).toMatchFileSnapshot(
+      "./index.snapshot.html",
+    );
   });
 });
