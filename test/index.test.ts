@@ -80,4 +80,28 @@ describe("API", () => {
     const response = await exports.default.fetch(url);
     expect(response.status).toBe(wantStatus);
   });
+
+  it("should fallback to a default version", async () => {
+    const request = new Request("http://example.com/v1/pairs");
+    const response = await exports.default.fetch(request);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Api-Version")).toEqual("2026-05-05.beta");
+  });
+
+  it("should accept a version", async () => {
+    const request = new Request("http://example.com/v1/pairs", {
+      headers: { "api-version": "2026-05-05.beta" },
+    });
+    const response = await exports.default.fetch(request);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Api-Version")).toEqual("2026-05-05.beta");
+  });
+
+  it("should reject an invalid version", async () => {
+    const request = new Request("http://example.com/v1/pairs", {
+      headers: { "api-version": "2000-01-01" },
+    });
+    const response = await exports.default.fetch(request);
+    expect(response.status).toBe(400);
+  });
 });
