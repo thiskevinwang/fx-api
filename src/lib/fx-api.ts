@@ -2,6 +2,7 @@
 
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
+import * as z from "zod";
 
 import docsMarkdownModule from "../docs.md";
 import faviconIcoDataModule from "../assets/favicon.ico";
@@ -109,31 +110,42 @@ const BINARY_ASSETS = [
   },
 ] as const;
 
-interface ParsedRangeRatesQuery {
-  mode: "observations";
-  from: string;
-  to: string;
-  start?: FxDateString;
-  end?: FxDateString;
-}
+const ParsedRatesCurrencySchema = z
+  .string()
+  .refine((value) => normalizeCurrencyCode(value) === value, {
+    message: "Must be a normalized three-letter currency code",
+  });
+const ParsedRatesDateSchema = z.custom<FxDateString>(
+  (value) => typeof value === "string" && isValidDateString(value),
+  {
+    message: "Must be a valid YYYY-MM-DD date",
+  },
+);
+const ParsedRangeRatesQuerySchema = z.object({
+  mode: z.literal("range"),
+  from: ParsedRatesCurrencySchema,
+  to: ParsedRatesCurrencySchema,
+  start: ParsedRatesDateSchema.optional(),
+  end: ParsedRatesDateSchema.optional(),
+});
+const ParsedAsofRatesQuerySchema = z.object({
+  mode: z.literal("asof"),
+  from: ParsedRatesCurrencySchema,
+  to: ParsedRatesCurrencySchema,
+  asof: ParsedRatesDateSchema,
+});
+const ParsedAllRatesQuerySchema = z.object({
+  mode: z.literal("all"),
+  from: ParsedRatesCurrencySchema,
+  to: ParsedRatesCurrencySchema,
+});
+const ParsedRatesQuerySchema = z.discriminatedUnion("mode", [
+  ParsedRangeRatesQuerySchema,
+  ParsedAsofRatesQuerySchema,
+  ParsedAllRatesQuerySchema,
+]);
 
-interface ParsedAsofRatesQuery {
-  mode: "asof";
-  from: string;
-  to: string;
-  asof: FxDateString;
-}
-
-interface ParsedAllRatesQuery {
-  mode: "all";
-  from: string;
-  to: string;
-}
-
-type ParsedRatesQuery =
-  | ParsedRangeRatesQuery
-  | ParsedAsofRatesQuery
-  | ParsedAllRatesQuery;
+type ParsedRatesQuery = z.infer<typeof ParsedRatesQuerySchema>;
 
 export function createFxApiApp(): Hono<{ Bindings: ApiBindings }> {
   const app = new Hono<{ Bindings: ApiBindings }>();
@@ -239,7 +251,7 @@ export function createFxApiApp(): Hono<{ Bindings: ApiBindings }> {
 
     if (parsedQuery.query.mode !== "asof") {
       const rates =
-        parsedQuery.query.mode === "observations"
+        parsedQuery.query.mode === "range"
           ? filterRatesByDateRange(
               snapshot,
               parsedQuery.query.start,
@@ -610,23 +622,23 @@ function parseRatesQuery(
 
     return {
       ok: true,
-      query: {
+      query: ParsedRatesQuerySchema.parse({
         mode: "asof",
         from: from.value,
         to: to.value,
         asof: parsedAsof.value,
-      },
+      }),
     };
   }
 
   if (start === null && end === null) {
     return {
       ok: true,
-      query: {
+      query: ParsedRatesQuerySchema.parse({
         mode: "all",
         from: from.value,
         to: to.value,
-      },
+      }),
     };
   }
 
@@ -665,13 +677,13 @@ function parseRatesQuery(
 
   return {
     ok: true,
-    query: {
-      mode: "observations",
+    query: ParsedRatesQuerySchema.parse({
+      mode: "range",
       from: from.value,
       to: to.value,
       start: parsedStart?.value,
       end: parsedEnd?.value,
-    },
+    }),
   };
 }
 
