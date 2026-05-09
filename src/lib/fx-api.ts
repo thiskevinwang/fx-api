@@ -33,6 +33,7 @@ import {
 } from "./fx-schemas";
 import { readFxManifest, readFxRateSnapshot } from "./fx-storage";
 import { apiVersionMiddleware } from "../api/versioning";
+import { loggingMiddleware } from "../api/logging";
 
 type ApiBindings = Pick<Env, "STATIC_FILES">;
 
@@ -183,6 +184,7 @@ export function createFxApiApp(): Hono<{ Bindings: ApiBindings }> {
   );
 
   app.use("/v1/*", apiVersionMiddleware);
+  app.use("/v1/*", loggingMiddleware);
   app.use("/v1/*", cacheSuccessfulGetResponses(API_CACHE_CONTROL));
 
   app.get("/v1/schemas/:object", (c) => {
