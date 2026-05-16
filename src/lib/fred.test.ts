@@ -4,7 +4,7 @@ import { test, assert } from "vitest";
 
 import { FredClient } from "./fred";
 
-void test("default fetch path preserves the runtime globalThis receiver", async () => {
+test("default fetch path preserves the runtime globalThis receiver", async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl: string | undefined;
 

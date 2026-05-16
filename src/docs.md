@@ -6,6 +6,7 @@
 - `GET /docs.md`
 - `GET /v1/pairs`
 - `GET /v1/rates/:from/:to`
+- `GET /v1/rates/:from/:to/graph`
 - `GET /v1/schemas/:object`
 
 ## Endpoints
@@ -33,6 +34,21 @@ Rules:
 - With `asof`, returns the latest stored observation on or before that date.
 - Paired `start` and `end` date ranges are capped at one calendar year.
 - Rates use `quote_per_base`: units of `to` currency per 1 unit of `from` currency.
+
+### `GET /v1/rates/:from/:to/graph`
+
+Returns observed rates for a currency pair as a plain-text horizontal Braille bar chart.
+
+Examples:
+
+- `GET /v1/rates/EUR/USD/graph`
+- `GET /v1/rates/EUR/USD/graph?start=2026-01-01&end=2026-04-30`
+- `GET /v1/rates/EUR/USD/graph?asof=2026-04-13`
+
+Rules:
+
+- Supports the same `start`, `end`, and `asof` query parameters as `GET /v1/rates/:from/:to`.
+- Bars are scaled between the minimum and maximum returned rates.
 
 ### `GET /v1/schemas/:object`
 

@@ -26,11 +26,11 @@ const pairConfigs = [
   },
 ] satisfies readonly FredFxPairConfig[];
 
-void test("deduplicates FRED source series IDs", () => {
+test("deduplicates FRED source series IDs", () => {
   assert.deepEqual(getUniqueFredSeriesIds(pairConfigs), ["TESTSERIES"]);
 });
 
-void test("builds direct and inverted pair snapshots from one source series", () => {
+test("builds direct and inverted pair snapshots from one source series", () => {
   const snapshots = buildFxSnapshotsFromFredObservationSets(
     [
       {

@@ -28,26 +28,26 @@ const snapshot: FxRateSnapshot = {
   ],
 };
 
-void test("normalizes currency codes and pair keys", () => {
+test("normalizes currency codes and pair keys", () => {
   assert.equal(normalizeCurrencyCode(" eur "), "EUR");
   assert.equal(normalizeCurrencyCode("EURO"), undefined);
   assert.equal(toPairKey("eur", "usd"), "EUR-USD");
   assert.equal(toRateSnapshotKey("eur", "usd"), "fx/v1/rates/EUR-USD.json");
 });
 
-void test("validates real calendar dates", () => {
+test("validates real calendar dates", () => {
   assert.equal(isValidDateString("2024-02-29"), true);
   assert.equal(isValidDateString("2026-02-29"), false);
   assert.equal(isValidDateString("2026-2-09"), false);
 });
 
-void test("enforces a maximum one-calendar-year range", () => {
+test("enforces a maximum one-calendar-year range", () => {
   assert.equal(isRangeWithinOneCalendarYear("2025-01-01", "2026-01-01"), true);
   assert.equal(isRangeWithinOneCalendarYear("2025-01-01", "2026-01-02"), false);
   assert.equal(isRangeWithinOneCalendarYear("2026-01-02", "2026-01-01"), false);
 });
 
-void test("filters snapshots by observed dates only", () => {
+test("filters snapshots by observed dates only", () => {
   assert.deepEqual(
     filterRatesByDateRange(snapshot, "2026-04-09", "2026-04-10"),
     [{ date: "2026-04-10", rate: "1.1" }],
@@ -62,7 +62,7 @@ void test("filters snapshots by observed dates only", () => {
   ]);
 });
 
-void test("finds the latest observed rate on or before an asOf date", () => {
+test("finds the latest observed rate on or before an asOf date", () => {
   assert.deepEqual(latestRateOnOrBefore(snapshot, "2026-04-09"), {
     date: "2026-04-08",
     rate: "1.08",

@@ -14,6 +14,8 @@ import {
   FX_RATE_SCALE,
   type FxDateString,
   type FxManifestPair,
+  type FxRateObservation,
+  type FxRateSnapshot,
   compareDateStrings,
   filterRatesByDateRange,
   isRangeWithinOneCalendarYear,
@@ -146,6 +148,14 @@ const ParsedRatesQuerySchema = z.discriminatedUnion("mode", [
 ]);
 
 type ParsedRatesQuery = z.infer<typeof ParsedRatesQuerySchema>;
+type ResolvedRatesQuery = {
+  snapshot: FxRateSnapshot;
+  rates: FxRateObservation[];
+};
+
+const GRAPH_BAR_WIDTH = 60;
+const GRAPH_BAR_CELL_STEPS = 6;
+const GRAPH_BAR_SYMBOLS = ["⠀", "⠄", "⠆", "⠇", "⠧", "⠷", "⠿"] as const;
 
 export function createFxApiApp(): Hono<{ Bindings: ApiBindings }> {
   const app = new Hono<{ Bindings: ApiBindings }>();
@@ -216,6 +226,33 @@ export function createFxApiApp(): Hono<{ Bindings: ApiBindings }> {
     );
   });
 
+  app.get("/v1/rates/:from/:to/graph", async (c) => {
+    const parsedQuery = parseRatesQuery(new URL(c.req.url).searchParams, {
+      from: c.req.param("from"),
+      to: c.req.param("to"),
+    });
+    if (!parsedQuery.ok) {
+      return apiError(c, 400, "bad_request", parsedQuery.message);
+    }
+
+    const resolvedQuery = await resolveRatesQuery(c, parsedQuery.query);
+    if (!resolvedQuery.ok) {
+      return resolvedQuery.response;
+    }
+
+    return c.text(
+      renderFxRateGraph({
+        from: parsedQuery.query.from,
+        to: parsedQuery.query.to,
+        rates: resolvedQuery.rates,
+      }),
+      200,
+      {
+        "Content-Type": PLAINTEXT_CONTENT_TYPE,
+      },
+    );
+  });
+
   app.get("/v1/rates/:from/:to", async (c) => {
     const parsedQuery = parseRatesQuery(new URL(c.req.url).searchParams, {
       from: c.req.param("from"),
@@ -225,76 +262,24 @@ export function createFxApiApp(): Hono<{ Bindings: ApiBindings }> {
       return apiError(c, 400, "bad_request", parsedQuery.message);
     }
 
-    const manifest = await readFxManifest(c.env.STATIC_FILES);
-    if (!manifest) {
-      return apiError(
-        c,
-        404,
-        "not_found",
-        "FX pair manifest has not been generated yet",
-      );
-    }
-
-    const pair = findManifestPair(
-      manifest.pairs,
-      parsedQuery.query.from,
-      parsedQuery.query.to,
-    );
-    if (!pair) {
-      return apiError(c, 404, "unsupported_pair", "Unsupported FX pair");
-    }
-
-    const snapshot = await readFxRateSnapshot(c.env.STATIC_FILES, pair.key);
-    if (!snapshot) {
-      return apiError(c, 404, "not_found", "FX rate snapshot was not found");
-    }
-
-    if (parsedQuery.query.mode !== "asof") {
-      const rates =
-        parsedQuery.query.mode === "range"
-          ? filterRatesByDateRange(
-              snapshot,
-              parsedQuery.query.start,
-              parsedQuery.query.end,
-            )
-          : snapshot.rates;
-
-      return c.json(
-        listResponse(
-          c,
-          rates.map((rate) =>
-            toRateResource({
-              from: parsedQuery.query.from,
-              to: parsedQuery.query.to,
-              generatedAt: snapshot.generatedAt,
-              date: rate.date,
-              rate: rate.rate,
-            }),
-          ),
-        ),
-      );
-    }
-
-    const rate = latestRateOnOrBefore(snapshot, parsedQuery.query.asof);
-    if (!rate) {
-      return apiError(
-        c,
-        404,
-        "not_found",
-        "No stored FX observation exists on or before asof",
-      );
+    const resolvedQuery = await resolveRatesQuery(c, parsedQuery.query);
+    if (!resolvedQuery.ok) {
+      return resolvedQuery.response;
     }
 
     return c.json(
-      listResponse(c, [
-        toRateResource({
-          from: parsedQuery.query.from,
-          to: parsedQuery.query.to,
-          generatedAt: snapshot.generatedAt,
-          date: rate.date,
-          rate: rate.rate,
-        }),
-      ]),
+      listResponse(
+        c,
+        resolvedQuery.rates.map((rate) =>
+          toRateResource({
+            from: parsedQuery.query.from,
+            to: parsedQuery.query.to,
+            generatedAt: resolvedQuery.snapshot.generatedAt,
+            date: rate.date,
+            rate: rate.rate,
+          }),
+        ),
+      ),
     );
   });
 
@@ -399,6 +384,124 @@ function toRateResource(rate: {
     rate_scale: FX_RATE_SCALE,
     generated_at: rate.generatedAt,
   });
+}
+
+async function resolveRatesQuery(
+  c: Context<{ Bindings: ApiBindings }>,
+  query: ParsedRatesQuery,
+): Promise<
+  | ({ ok: true } & ResolvedRatesQuery)
+  | { ok: false; response: Response }
+> {
+  const manifest = await readFxManifest(c.env.STATIC_FILES);
+  if (!manifest) {
+    return {
+      ok: false,
+      response: apiError(
+        c,
+        404,
+        "not_found",
+        "FX pair manifest has not been generated yet",
+      ),
+    };
+  }
+
+  const pair = findManifestPair(manifest.pairs, query.from, query.to);
+  if (!pair) {
+    return {
+      ok: false,
+      response: apiError(c, 404, "unsupported_pair", "Unsupported FX pair"),
+    };
+  }
+
+  const snapshot = await readFxRateSnapshot(c.env.STATIC_FILES, pair.key);
+  if (!snapshot) {
+    return {
+      ok: false,
+      response: apiError(c, 404, "not_found", "FX rate snapshot was not found"),
+    };
+  }
+
+  if (query.mode !== "asof") {
+    return {
+      ok: true,
+      snapshot,
+      rates:
+        query.mode === "range"
+          ? filterRatesByDateRange(snapshot, query.start, query.end)
+          : snapshot.rates,
+    };
+  }
+
+  const rate = latestRateOnOrBefore(snapshot, query.asof);
+  if (!rate) {
+    return {
+      ok: false,
+      response: apiError(
+        c,
+        404,
+        "not_found",
+        "No stored FX observation exists on or before asof",
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    snapshot,
+    rates: [rate],
+  };
+}
+
+function renderFxRateGraph(input: {
+  from: string;
+  to: string;
+  rates: readonly FxRateObservation[];
+}): string {
+  const title = `${input.from}/${input.to} ${FX_RATE_SCALE} rates`;
+  const lines = [
+    title,
+    GRAPH_BAR_SYMBOLS[GRAPH_BAR_CELL_STEPS].repeat(
+      Math.max(GRAPH_BAR_WIDTH, title.length),
+    ),
+  ];
+
+  if (input.rates.length === 0) {
+    lines.push("(no observations)");
+    return `${lines.join("\n")}\n`;
+  }
+
+  const rateValues = input.rates.map((rate) => Number(rate.rate));
+  const minRate = Math.min(...rateValues);
+  const maxRate = Math.max(...rateValues);
+  const rateRange = maxRate - minRate;
+  const maxFilledSteps = GRAPH_BAR_WIDTH * GRAPH_BAR_CELL_STEPS;
+  const rateWidth = Math.max(...input.rates.map((rate) => rate.rate.length));
+
+  for (const rate of input.rates) {
+    const value = Number(rate.rate);
+    const filledSteps =
+      rateRange === 0
+        ? maxFilledSteps
+        : Math.round(((value - minRate) / rateRange) * maxFilledSteps);
+    const bar = renderBrailleBar(filledSteps);
+    lines.push(`${bar}  ${rate.rate.padStart(rateWidth)}  ${rate.date}`);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function renderBrailleBar(filledSteps: number): string {
+  return Array.from({ length: GRAPH_BAR_WIDTH }, (_, index) => {
+    const cellSteps = Math.max(
+      0,
+      Math.min(
+        GRAPH_BAR_CELL_STEPS,
+        filledSteps - index * GRAPH_BAR_CELL_STEPS,
+      ),
+    );
+    return GRAPH_BAR_SYMBOLS[cellSteps];
+  }).join("");
 }
 
 function requestUrl(c: Context<{ Bindings: ApiBindings }>): string {
@@ -736,7 +839,7 @@ function apiError(
   status: ApiErrorStatus,
   code: ApiErrorCode,
   message: string,
-) {
+): Response {
   return c.json(
     ErrorResponseSchema.parse({
       error: {

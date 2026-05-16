@@ -25,7 +25,7 @@ const snapshot: FxRateSnapshot = {
   ],
 };
 
-void test("GET / returns a barebones HTML page linking to docs with SEO metadata", async () => {
+test("GET / returns a barebones HTML page linking to docs with SEO metadata", async () => {
   const response = await request("/", mockBucketWithSnapshot(snapshot));
   assert.equal(response.status, 200);
   assert.equal(
@@ -96,7 +96,7 @@ void test("GET / returns a barebones HTML page linking to docs with SEO metadata
   assert.match(body, /<a href="\/docs">View API docs<\/a>/);
 });
 
-void test("GET /og-image.png serves the cached Open Graph image", async () => {
+test("GET /og-image.png serves the cached Open Graph image", async () => {
   const response = await request(
     "/og-image.png",
     mockBucketWithSnapshot(snapshot),
@@ -116,7 +116,7 @@ void test("GET /og-image.png serves the cached Open Graph image", async () => {
   );
 });
 
-void test("GET favicon assets serves cached icon files", async () => {
+test("GET favicon assets serves cached icon files", async () => {
   const faviconIcoResponse = await request(
     "/favicon.ico",
     mockBucketWithSnapshot(snapshot),
@@ -161,7 +161,7 @@ void test("GET favicon assets serves cached icon files", async () => {
   }
 });
 
-void test("GET /docs returns the docs markdown as plain text", async () => {
+test("GET /docs returns the docs markdown as plain text", async () => {
   const response = await request("/docs", mockBucketWithSnapshot(snapshot));
   assert.equal(response.status, 200);
   assert.equal(
@@ -172,6 +172,7 @@ void test("GET /docs returns the docs markdown as plain text", async () => {
   const body = await response.text();
   assert.match(body, /^# monies\.dev/);
   assert.match(body, /GET \/v1\/rates\/:from\/:to/);
+  assert.match(body, /GET \/v1\/rates\/:from\/:to\/graph/);
   assert.match(body, /GET \/v1\/schemas\/:object/);
   assert.notMatch(
     body,
@@ -179,7 +180,7 @@ void test("GET /docs returns the docs markdown as plain text", async () => {
   );
 });
 
-void test("GET /docs.md returns the same docs markdown with markdown content type", async () => {
+test("GET /docs.md returns the same docs markdown with markdown content type", async () => {
   const [docsResponse, markdownResponse] = await Promise.all([
     request("/docs", mockBucketWithSnapshot(snapshot)),
     request("/docs.md", mockBucketWithSnapshot(snapshot)),
@@ -193,7 +194,7 @@ void test("GET /docs.md returns the same docs markdown with markdown content typ
   assert.equal(await markdownResponse.text(), await docsResponse.text());
 });
 
-void test("GET /v1/schemas/:object returns JSON Schema for a public object", async () => {
+test("GET /v1/schemas/:object returns JSON Schema for a public object", async () => {
   const response = await request(
     "/v1/schemas/fx_rate",
     mockBucketWithSnapshot(snapshot),
@@ -223,7 +224,7 @@ void test("GET /v1/schemas/:object returns JSON Schema for a public object", asy
   assert.ok(body.required.includes("generated_at"));
 });
 
-void test("GET /v1/schemas/:object returns not_found for unknown schema objects", async () => {
+test("GET /v1/schemas/:object returns not_found for unknown schema objects", async () => {
   const response = await request(
     "/v1/schemas/nope",
     mockBucketWithSnapshot(snapshot),
@@ -238,7 +239,7 @@ void test("GET /v1/schemas/:object returns not_found for unknown schema objects"
   assert.match(body.error.message, /Supported objects:/);
 });
 
-void test("GET /v1/pairs returns supported manifest pairs without storage keys", async () => {
+test("GET /v1/pairs returns supported manifest pairs without storage keys", async () => {
   const response = await request("/v1/pairs", mockBucketWithSnapshot(snapshot));
   assert.equal(response.status, 200);
 
@@ -271,7 +272,7 @@ void test("GET /v1/pairs returns supported manifest pairs without storage keys",
   assert.equal(body.data[0]?.key, undefined);
 });
 
-void test("GET /v1/rates/:from/:to returns inclusive observed rates for a date range", async () => {
+test("GET /v1/rates/:from/:to returns inclusive observed rates for a date range", async () => {
   const response = await request(
     "/v1/rates/eur/usd?start=2026-04-09&end=2026-04-11",
     mockBucketWithSnapshot(snapshot),
@@ -321,7 +322,7 @@ void test("GET /v1/rates/:from/:to returns inclusive observed rates for a date r
   ]);
 });
 
-void test("GET /v1/rates/:from/:to asof returns the latest prior observation", async () => {
+test("GET /v1/rates/:from/:to asof returns the latest prior observation", async () => {
   const response = await request(
     "/v1/rates/EUR/USD?asof=2026-04-09",
     mockBucketWithSnapshot(snapshot),
@@ -357,7 +358,7 @@ void test("GET /v1/rates/:from/:to asof returns the latest prior observation", a
   ]);
 });
 
-void test("GET /v1/rates/:from/:to supports a start-only date filter", async () => {
+test("GET /v1/rates/:from/:to supports a start-only date filter", async () => {
   const response = await request(
     "/v1/rates/EUR/USD?start=2026-04-10",
     mockBucketWithSnapshot(snapshot),
@@ -393,7 +394,7 @@ void test("GET /v1/rates/:from/:to supports a start-only date filter", async () 
   );
 });
 
-void test("GET /v1/rates/:from/:to supports an end-only date filter", async () => {
+test("GET /v1/rates/:from/:to supports an end-only date filter", async () => {
   const response = await request(
     "/v1/rates/EUR/USD?end=2026-04-10",
     mockBucketWithSnapshot(snapshot),
@@ -429,7 +430,7 @@ void test("GET /v1/rates/:from/:to supports an end-only date filter", async () =
   );
 });
 
-void test("GET /v1/rates/:from/:to without query params returns all stored observations", async () => {
+test("GET /v1/rates/:from/:to without query params returns all stored observations", async () => {
   const response = await request(
     "/v1/rates/EUR/USD",
     mockBucketWithSnapshot(snapshot),
@@ -489,7 +490,55 @@ void test("GET /v1/rates/:from/:to without query params returns all stored obser
   ]);
 });
 
-void test("GET /v1/rates/:from/:to rejects ranges longer than one calendar year", async () => {
+test("GET /v1/rates/:from/:to/graph returns a plain-text Braille bar chart", async () => {
+  const graphSnapshot: FxRateSnapshot = {
+    ...snapshot,
+    rates: [
+      { date: "2026-04-08", rate: "1" },
+      { date: "2026-04-10", rate: "1.242" },
+      { date: "2026-04-11", rate: "1.36" },
+    ],
+  };
+  const response = await request(
+    "/v1/rates/EUR/USD/graph",
+    mockBucketWithSnapshot(graphSnapshot),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get("Content-Type"),
+    "text/plain; charset=utf-8",
+  );
+
+  const full = "⠿";
+  const twoSteps = "⠆";
+  const empty = "⠀";
+  const lines = (await response.text()).split("\n");
+  assert.deepEqual(lines, [
+    "EUR/USD quote_per_base rates",
+    full.repeat(60),
+    `${empty.repeat(60)}  ${"1".padStart(5)}  2026-04-08`,
+    `${full.repeat(40)}${twoSteps}${empty.repeat(19)}  1.242  2026-04-10`,
+    `${full.repeat(60)}  ${"1.36".padStart(5)}  2026-04-11`,
+    "",
+  ]);
+});
+
+test("GET /v1/rates/:from/:to/graph supports the rate query parameters", async () => {
+  const response = await request(
+    "/v1/rates/EUR/USD/graph?start=2026-09-01",
+    mockBucketWithSnapshot(snapshot),
+  );
+  assert.equal(response.status, 200);
+
+  assert.deepEqual((await response.text()).split("\n"), [
+    "EUR/USD quote_per_base rates",
+    "⠿".repeat(60),
+    "(no observations)",
+    "",
+  ]);
+});
+
+test("GET /v1/rates/:from/:to rejects ranges longer than one calendar year", async () => {
   const response = await request(
     "/v1/rates/EUR/USD?start=2025-01-01&end=2026-01-02",
     mockBucketWithSnapshot(snapshot),
@@ -503,7 +552,7 @@ void test("GET /v1/rates/:from/:to rejects ranges longer than one calendar year"
   assert.equal(body.error.code, "bad_request");
 });
 
-void test("GET /v1/rates/:from/:to returns unsupported_pair for pairs absent from the manifest", async () => {
+test("GET /v1/rates/:from/:to returns unsupported_pair for pairs absent from the manifest", async () => {
   const response = await request(
     "/v1/rates/USD/EUR?start=2026-04-09&end=2026-04-11",
     mockBucketWithSnapshot(snapshot),
@@ -517,7 +566,7 @@ void test("GET /v1/rates/:from/:to returns unsupported_pair for pairs absent fro
   assert.equal(body.error.code, "unsupported_pair");
 });
 
-void test("GET /v1/rates/:from/:to asof returns not_found when no prior observation exists", async () => {
+test("GET /v1/rates/:from/:to asof returns not_found when no prior observation exists", async () => {
   const response = await request(
     "/v1/rates/EUR/USD?asof=2026-04-07",
     mockBucketWithSnapshot(snapshot),
@@ -531,7 +580,7 @@ void test("GET /v1/rates/:from/:to asof returns not_found when no prior observat
   assert.equal(body.error.code, "not_found");
 });
 
-void test("GET /v1/rates/:from/:to rejects legacy asOf casing", async () => {
+test("GET /v1/rates/:from/:to rejects legacy asOf casing", async () => {
   const response = await request(
     "/v1/rates/EUR/USD?asOf=2026-04-09",
     mockBucketWithSnapshot(snapshot),
@@ -546,7 +595,7 @@ void test("GET /v1/rates/:from/:to rejects legacy asOf casing", async () => {
   assert.equal(body.error.message, "Use asof instead of asOf");
 });
 
-void test("GET /v1/rates without path currencies is not registered", async () => {
+test("GET /v1/rates without path currencies is not registered", async () => {
   const response = await request(
     "/v1/rates?from=EUR&to=USD&asof=2026-04-09",
     mockBucketWithSnapshot(snapshot),
@@ -560,7 +609,7 @@ void test("GET /v1/rates without path currencies is not registered", async () =>
   assert.equal(body.error.code, "not_found");
 });
 
-void test("GET /v1/rates/:from/:to caches 200 responses for one hour", async () => {
+test("GET /v1/rates/:from/:to caches 200 responses for one hour", async () => {
   const cache = mockCache();
   const r2Reads: string[] = [];
   const bucket = mockBucketWithSnapshot(snapshot, r2Reads);
@@ -597,7 +646,7 @@ void test("GET /v1/rates/:from/:to caches 200 responses for one hour", async () 
   });
 });
 
-void test("GET /v1/rates/:from/:to does not cache non-200 responses", async () => {
+test("GET /v1/rates/:from/:to does not cache non-200 responses", async () => {
   const cache = mockCache();
   const bucket = mockBucketWithSnapshot(snapshot);
   const app = createFxApiApp();
@@ -614,6 +663,40 @@ void test("GET /v1/rates/:from/:to does not cache non-200 responses", async () =
 
     assert.equal(response.status, 400);
     assert.equal(cache.putCount, 0);
+  });
+});
+
+test("GET /v1/rates/:from/:to/graph caches 200 responses for one hour", async () => {
+  const cache = mockCache();
+  const r2Reads: string[] = [];
+  const bucket = mockBucketWithSnapshot(snapshot, r2Reads);
+  const app = createFxApiApp();
+  const requestUrl = "https://example.test/v1/rates/EUR/USD/graph";
+
+  await withMockCaches(cache, async () => {
+    const firstResponse = await app.fetch(new Request(requestUrl), {
+      STATIC_FILES: bucket,
+    });
+    assert.equal(firstResponse.status, 200);
+    assert.equal(
+      firstResponse.headers.get("Cache-Control"),
+      "public, max-age=3600",
+    );
+    assert.equal(cache.putCount, 1);
+    assert.equal(r2Reads.length, 2);
+    assert.match(await firstResponse.text(), /^EUR\/USD quote_per_base rates/);
+
+    const secondResponse = await app.fetch(new Request(requestUrl), {
+      STATIC_FILES: bucket,
+    });
+    assert.equal(secondResponse.status, 200);
+    assert.equal(
+      secondResponse.headers.get("Cache-Control"),
+      "public, max-age=3600",
+    );
+    assert.equal(cache.putCount, 1);
+    assert.equal(r2Reads.length, 2);
+    assert.match(await secondResponse.text(), /^EUR\/USD quote_per_base rates/);
   });
 });
 
